@@ -2,6 +2,7 @@ import { ResizableSidebar } from "@components/ResizableSidebar";
 import { useAuthStore } from "@features/auth/stores/authStore";
 import {
   useInboxReportArtefacts,
+  useInboxReportSignals,
   useInboxReports,
 } from "@features/inbox/hooks/useInboxReports";
 import { useInboxCloudTaskStore } from "@features/inbox/stores/inboxCloudTaskStore";
@@ -35,6 +36,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SignalsErrorState, SignalsLoadingState } from "./InboxEmptyStates";
 import { ReportCard } from "./ReportCard";
+import { SignalCard } from "./SignalCard";
 
 interface InboxSignalsTabProps {
   onGoToSetup: () => void;
@@ -58,7 +60,9 @@ function getArtefactsUnavailableMessage(
 }
 
 export function InboxSignalsTab({ onGoToSetup }: InboxSignalsTabProps) {
-  const { data, isLoading, isFetching, error, refetch } = useInboxReports();
+  const { data, isLoading, isFetching, error, refetch } = useInboxReports({
+    status: "ready",
+  });
   const reports = data?.results ?? [];
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const sidebarOpen = useInboxSignalsSidebarStore((state) => state.open);
@@ -108,6 +112,11 @@ export function InboxSignalsTab({ onGoToSetup }: InboxSignalsTabProps) {
     ? "Evidence could not be loaded right now. You can still create a task from this report."
     : getArtefactsUnavailableMessage(artefactsUnavailableReason);
 
+  const signalsQuery = useInboxReportSignals(selectedReport?.id ?? "", {
+    enabled: !!selectedReport,
+  });
+  const signals = signalsQuery.data?.signals ?? [];
+
   const cloudRegion = useAuthStore((state) => state.cloudRegion);
   const projectId = useAuthStore((state) => state.projectId);
   const replayBaseUrl =
@@ -134,9 +143,10 @@ export function InboxSignalsTab({ onGoToSetup }: InboxSignalsTabProps) {
     return buildSignalTaskPrompt({
       report: selectedReport,
       artefacts: visibleArtefacts,
+      signals,
       replayBaseUrl,
     });
-  }, [selectedReport, visibleArtefacts, replayBaseUrl]);
+  }, [selectedReport, visibleArtefacts, signals, replayBaseUrl]);
 
   const handleCreateTask = () => {
     const prompt = buildPrompt();
@@ -335,6 +345,33 @@ export function InboxSignalsTab({ onGoToSetup }: InboxSignalsTabProps) {
                     {selectedReport.relevant_user_count ?? 0} affected users
                   </Badge>
                 </Flex>
+
+                {signals.length > 0 && (
+                  <Box>
+                    <Text
+                      size="1"
+                      weight="medium"
+                      className="block font-mono text-[12px]"
+                      mb="2"
+                    >
+                      Signals ({signals.length})
+                    </Text>
+                    <Flex direction="column" gap="2">
+                      {signals.map((signal) => (
+                        <SignalCard key={signal.signal_id} signal={signal} />
+                      ))}
+                    </Flex>
+                  </Box>
+                )}
+                {signalsQuery.isLoading && (
+                  <Text
+                    size="1"
+                    color="gray"
+                    className="block font-mono text-[11px]"
+                  >
+                    Loading signals...
+                  </Text>
+                )}
 
                 <Box>
                   <Text
