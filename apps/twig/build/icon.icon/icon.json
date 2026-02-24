@@ -1,6 +1,6 @@
 {
   "fill": {
-    "solid": "srgb:0.96078,0.41961,0.08235,1.00000"
+    "solid": "display-p3:0.97647,0.93333,0.88235,1.00000"
   },
   "groups": [
     {
@@ -9,12 +9,12 @@
         {
           "blend-mode": "normal",
           "fill": "automatic",
-          "glass": true,
+          "glass": false,
           "hidden": false,
-          "image-name": "logo.png",
-          "name": "logo",
+          "image-name": "twig-favicon-dark.svg",
+          "name": "twig-favicon-dark",
           "position": {
-            "scale": 1,
+            "scale": 15,
             "translation-in-points": [0, 0]
           }
         }
