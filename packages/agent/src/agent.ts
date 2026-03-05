@@ -157,6 +157,10 @@ export class Agent {
     });
   }
 
+  getPosthogAPI(): PostHogAPIClient | undefined {
+    return this.posthogAPI;
+  }
+
   async flushAllLogs(): Promise<void> {
     await this.sessionLogWriter?.flushAll();
   }

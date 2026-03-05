@@ -12,6 +12,7 @@ import {
   type SessionConfigOption,
 } from "@agentclientprotocol/sdk";
 import { isMcpToolReadOnly } from "@posthog/agent";
+import { hydrateSessionJsonl } from "@posthog/agent/adapters/claude/session/jsonl-hydration";
 import { Agent } from "@posthog/agent/agent";
 import {
   fetchGatewayModels,
@@ -571,8 +572,22 @@ export class AgentService extends TypedEventEmitter<AgentServiceEvents> {
         });
         configOptions = loadResponse.configOptions ?? undefined;
         agentSessionId = existingSessionId;
-      } else if (isReconnect && adapter !== "codex" && config.sessionId) {
+      } else if (isReconnect && adapter === "claude" && config.sessionId) {
         const existingSessionId = config.sessionId;
+
+        const posthogAPI = agent.getPosthogAPI();
+        if (posthogAPI) {
+          await hydrateSessionJsonl({
+            sessionId: existingSessionId,
+            cwd: repoPath,
+            taskId,
+            runId: taskRunId,
+            permissionMode: config.permissionMode,
+            posthogAPI,
+            log,
+          });
+        }
+
         const systemPrompt = this.buildSystemPrompt(
           credentials,
           customInstructions,
@@ -683,6 +698,16 @@ export class AgentService extends TypedEventEmitter<AgentServiceEvents> {
         }`,
         err,
       );
+      // Non-auth reconnect failure on first attempt: fall back to a fresh session.
+      // If this was already an auth retry (isRetry=true), we've exhausted retries
+      // and return null to avoid infinite loops.
+      if (isReconnect && !isRetry) {
+        log.warn("Reconnect failed, falling back to new session", {
+          taskRunId,
+        });
+        config.sessionId = undefined;
+        return this.getOrCreateSession(config, false, false);
+      }
       if (isReconnect) return null;
       throw err;
     }
@@ -897,19 +922,15 @@ export class AgentService extends TypedEventEmitter<AgentServiceEvents> {
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-
     if (!session.interruptReason) {
       throw new Error(`Session ${sessionId} was not interrupted`);
     }
-
     log.info("Resuming interrupted session", {
       sessionId,
       reason: session.interruptReason,
     });
-
     // Clear the interrupt reason
     session.interruptReason = undefined;
-
     // Send a continue prompt
     return this.prompt(sessionId, [
       { type: "text", text: "Continue where you left off." },
