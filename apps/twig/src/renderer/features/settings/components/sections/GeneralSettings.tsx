@@ -1,3 +1,4 @@
+import { useAuthStore } from "@features/auth/stores/authStore";
 import { SettingRow } from "@features/settings/components/SettingRow";
 import {
   type CompletionSound,
@@ -8,12 +9,14 @@ import {
 import {
   Button,
   Flex,
+  Link,
   Select,
   Slider,
   Switch,
   Text,
   TextField,
 } from "@radix-ui/themes";
+import { getCloudUrlFromRegion } from "@shared/constants/oauth";
 import { ANALYTICS_EVENTS } from "@shared/types/analytics";
 import { useSettingsStore as useTerminalSettingsStore } from "@stores/settingsStore";
 import type { ThemePreference } from "@stores/themeStore";
@@ -67,6 +70,7 @@ export function GeneralSettings() {
     autoConvertLongText,
     diffOpenMode,
     sendMessagesWith,
+    hedgehogMode,
     setDesktopNotifications,
     setDockBadgeNotifications,
     setDockBounceNotifications,
@@ -75,6 +79,7 @@ export function GeneralSettings() {
     setAutoConvertLongText,
     setDiffOpenMode,
     setSendMessagesWith,
+    setHedgehogMode,
   } = useSettingsStore();
 
   // Sync toggle off if the user denied notification permission at the OS level
@@ -287,6 +292,18 @@ export function GeneralSettings() {
       setSendMessagesWith(value);
     },
     [sendMessagesWith, setSendMessagesWith],
+  );
+
+  const handleHedgehogModeChange = useCallback(
+    (checked: boolean) => {
+      track(ANALYTICS_EVENTS.SETTING_CHANGED, {
+        setting_name: "hedgehog_mode",
+        new_value: checked,
+        old_value: hedgehogMode,
+      });
+      setHedgehogMode(checked);
+    },
+    [hedgehogMode, setHedgehogMode],
   );
 
   const terminalFontSelection = TERMINAL_FONT_PRESETS.some(
@@ -519,6 +536,49 @@ export function GeneralSettings() {
           </Select.Content>
         </Select.Root>
       </SettingRow>
+
+      {/* Fun */}
+      <Text size="2" weight="medium" className="mt-4 mb-2">
+        Fun
+      </Text>
+
+      <SettingRow
+        label="Hedgehog mode"
+        description={<HedgehogDescription />}
+        noBorder
+      >
+        <Switch
+          checked={hedgehogMode}
+          onCheckedChange={handleHedgehogModeChange}
+          size="1"
+        />
+      </SettingRow>
+    </Flex>
+  );
+}
+
+function HedgehogDescription() {
+  const cloudRegion = useAuthStore((s) => s.cloudRegion);
+  const projectId = useAuthStore((s) => s.projectId);
+
+  const customizeUrl =
+    cloudRegion && projectId
+      ? `${getCloudUrlFromRegion(cloudRegion)}/project/${projectId}/settings/user-customization`
+      : null;
+
+  return (
+    <Flex direction="column" gap="1">
+      <Text size="1" color="gray">
+        Release a hedgehog buddy to walk around your screen. It might take a few
+        seconds to appear.
+      </Text>
+      {customizeUrl && (
+        <Text size="1" color="gray">
+          <Link href={customizeUrl} target="_blank">
+            Customize your hedgehog
+          </Link>
+        </Text>
+      )}
     </Flex>
   );
 }

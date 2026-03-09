@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: rendererAliases,
+      dedupe: ["react", "react-dom"],
     },
   };
 });
