@@ -819,7 +819,15 @@ export class SessionService {
     const session = sessionStoreSetters.getSessions()[taskRunId];
     if (!session) return;
 
-    sessionStoreSetters.appendEvents(taskRunId, [acpMsg]);
+    const isUserPromptEcho =
+      isJsonRpcRequest(acpMsg.message) &&
+      acpMsg.message.method === "session/prompt";
+
+    if (isUserPromptEcho) {
+      sessionStoreSetters.replaceOptimisticWithEvent(taskRunId, acpMsg);
+    } else {
+      sessionStoreSetters.appendEvents(taskRunId, [acpMsg]);
+    }
     this.updatePromptStateFromEvents(taskRunId, [acpMsg]);
 
     const msg = acpMsg.message;
@@ -997,7 +1005,7 @@ export class SessionService {
       prompt_length_chars: promptText.length,
     });
 
-    return this.sendLocalPrompt(session, blocks);
+    return this.sendLocalPrompt(session, blocks, promptText);
   }
 
   /**
@@ -1044,7 +1052,7 @@ export class SessionService {
     });
 
     try {
-      return await this.sendLocalPrompt(session, blocks);
+      return await this.sendLocalPrompt(session, blocks, combinedText);
     } catch (error) {
       // Log that queued messages were lost due to send failure
       log.error("Failed to send queued messages, messages lost", {
@@ -1059,10 +1067,17 @@ export class SessionService {
   private async sendLocalPrompt(
     session: AgentSession,
     blocks: ContentBlock[],
+    promptText: string,
   ): Promise<{ stopReason: string }> {
     sessionStoreSetters.updateSession(session.taskRunId, {
       isPromptPending: true,
       promptStartedAt: Date.now(),
+    });
+
+    sessionStoreSetters.appendOptimisticItem(session.taskRunId, {
+      type: "user_message",
+      content: promptText,
+      timestamp: Date.now(),
     });
 
     try {
@@ -1070,7 +1085,6 @@ export class SessionService {
         sessionId: session.taskRunId,
         prompt: blocks,
       });
-      // Clear pending state on success
       sessionStoreSetters.updateSession(session.taskRunId, {
         isPromptPending: false,
         promptStartedAt: null,
@@ -1081,6 +1095,8 @@ export class SessionService {
         error instanceof Error ? error.message : String(error);
       const errorDetails = (error as { data?: { details?: string } }).data
         ?.details;
+
+      sessionStoreSetters.clearOptimisticItems(session.taskRunId);
 
       if (isFatalSessionError(errorMessage, errorDetails)) {
         log.error("Fatal prompt error, setting session to error state", {
@@ -2144,6 +2160,7 @@ export class SessionService {
       promptStartedAt: null,
       pendingPermissions: new Map(),
       messageQueue: [],
+      optimisticItems: [],
     };
   }
 
