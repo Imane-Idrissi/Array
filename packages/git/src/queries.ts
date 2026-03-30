@@ -971,8 +971,17 @@ export async function addToLocalExclude(
   pattern: string,
   options?: CreateGitClientOptions,
 ): Promise<void> {
-  const gitDir = await resolveGitDir(baseDir, options);
-  const excludePath = path.join(gitDir, "info", "exclude");
+  const manager = getGitOperationManager();
+  const excludePath = await manager.executeRead(
+    baseDir,
+    async (git) => {
+      // --git-path resolves to the correct location for both regular repos
+      // and worktrees (where info/exclude is shared via the common dir)
+      const rel = await git.revparse(["--git-path", "info/exclude"]);
+      return path.resolve(baseDir, rel);
+    },
+    { signal: options?.abortSignal },
+  );
 
   let content = "";
   try {
@@ -988,7 +997,7 @@ export async function addToLocalExclude(
     return;
   }
 
-  const infoDir = path.join(gitDir, "info");
+  const infoDir = path.dirname(excludePath);
   await fs.mkdir(infoDir, { recursive: true });
 
   const newContent = content.trimEnd()
