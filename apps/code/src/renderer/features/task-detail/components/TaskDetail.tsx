@@ -8,8 +8,10 @@ import {
   getLeafPanel,
   parseTabId,
 } from "@features/panels/store/panelStoreHelpers";
+import { getSessionService } from "@features/sessions/service/service";
 import { useCwd } from "@features/sidebar/hooks/useCwd";
 import { useTaskData } from "@features/task-detail/hooks/useTaskData";
+import { useUpdateTask } from "@features/tasks/hooks/useTasks";
 import { useTaskStore } from "@features/tasks/stores/taskStore";
 import { useWorkspaceEvents } from "@features/workspace/hooks";
 import { useWorkspace } from "@features/workspace/hooks/useWorkspace";
@@ -18,11 +20,16 @@ import { useFileWatcher } from "@hooks/useFileWatcher";
 import { useSetHeaderContent } from "@hooks/useSetHeaderContent";
 import { Box, Flex, Text } from "@radix-ui/themes";
 import type { Task } from "@shared/types";
+import { useQueryClient } from "@tanstack/react-query";
+import { logger } from "@utils/logger";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHotkeys, useHotkeysContext } from "react-hotkeys-hook";
 import { ExternalAppsOpener } from "./ExternalAppsOpener";
 
+import { HeaderTitleEditor } from "./HeaderTitleEditor";
+
 const MIN_REVIEW_WIDTH = 300;
+const log = logger.scope("task-detail");
 
 interface TaskDetailProps {
   task: Task;
@@ -85,12 +92,63 @@ export function TaskDetail({ task: initialTask }: TaskDetailProps) {
   useBlurOnEscape();
   useWorkspaceEvents(taskId);
 
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const updateTask = useUpdateTask();
+  const queryClient = useQueryClient();
+
+  const handleTitleEditSubmit = useCallback(
+    async (newTitle: string) => {
+      setIsEditingTitle(false);
+
+      queryClient.setQueriesData<Task[]>(
+        { queryKey: ["tasks", "list"] },
+        (old) =>
+          old?.map((t) =>
+            t.id === taskId
+              ? { ...t, title: newTitle, title_manually_set: true }
+              : t,
+          ),
+      );
+
+      getSessionService().updateSessionTaskTitle(taskId, newTitle);
+
+      try {
+        await updateTask.mutateAsync({
+          taskId,
+          updates: { title: newTitle, title_manually_set: true },
+        });
+      } catch (error) {
+        log.error("Failed to rename task", error);
+        getSessionService().updateSessionTaskTitle(taskId, task.title);
+        queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+      }
+    },
+    [taskId, task.title, updateTask, queryClient],
+  );
+
+  const handleTitleEditCancel = useCallback(() => {
+    setIsEditingTitle(false);
+  }, []);
   const headerContent = useMemo(
     () => (
       <Flex align="center" justify="between" gap="2" width="100%">
-        <Text size="1" weight="medium" truncate style={{ minWidth: 0 }}>
-          {task.title}
-        </Text>
+        {isEditingTitle ? (
+          <HeaderTitleEditor
+            initialTitle={task.title}
+            onSubmit={handleTitleEditSubmit}
+            onCancel={handleTitleEditCancel}
+          />
+        ) : (
+          <Text
+            size="1"
+            weight="medium"
+            truncate
+            className="no-drag min-w-0"
+            onDoubleClick={() => setIsEditingTitle(true)}
+          >
+            {task.title}
+          </Text>
+        )}
         {openTargetPath && (
           <Flex align="center" gap="2" className="shrink-0">
             <ExternalAppsOpener targetPath={openTargetPath} />
@@ -98,7 +156,13 @@ export function TaskDetail({ task: initialTask }: TaskDetailProps) {
         )}
       </Flex>
     ),
-    [task.title, openTargetPath],
+    [
+      task.title,
+      openTargetPath,
+      isEditingTitle,
+      handleTitleEditSubmit,
+      handleTitleEditCancel,
+    ],
   );
 
   useSetHeaderContent(headerContent);
