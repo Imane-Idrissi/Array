@@ -3,12 +3,14 @@ import path from "node:path";
 import { getRemoteUrl, isGitRepository } from "@posthog/git/queries";
 import { InitRepositorySaga } from "@posthog/git/sagas/init";
 
+import { normalizeRepoKey } from "@shared/utils/repo";
+
 function extractRepoKey(url: string): string | null {
   const httpsMatch = url.match(/github\.com\/([^/]+\/[^/]+)/);
-  if (httpsMatch) return httpsMatch[1].replace(/\.git$/, "");
+  if (httpsMatch) return normalizeRepoKey(httpsMatch[1]);
 
   const sshMatch = url.match(/github\.com:([^/]+\/[^/]+)/);
-  if (sshMatch) return sshMatch[1].replace(/\.git$/, "");
+  if (sshMatch) return normalizeRepoKey(sshMatch[1]);
 
   return null;
 }
@@ -80,6 +82,20 @@ export class FoldersService {
     }
   }
 
+  private getDisplayName(
+    repoPath: string,
+    remoteUrl: string | null | undefined,
+  ): string {
+    const localName = path.basename(repoPath);
+    if (remoteUrl) {
+      const repoName = normalizeRepoKey(remoteUrl).split("/").pop();
+      if (repoName && repoName.toLowerCase() !== localName.toLowerCase()) {
+        return `${localName} (${repoName})`;
+      }
+    }
+    return localName;
+  }
+
   async getFolders(): Promise<(RegisteredFolder & { exists: boolean })[]> {
     const repos = this.repositoryRepo.findAll();
     return repos
@@ -87,7 +103,7 @@ export class FoldersService {
       .map((r) => ({
         id: r.id,
         path: r.path,
-        name: path.basename(r.path),
+        name: this.getDisplayName(r.path, r.remoteUrl),
         remoteUrl: r.remoteUrl ?? null,
         lastAccessed: r.lastAccessedAt ?? r.createdAt,
         createdAt: r.createdAt,
@@ -177,7 +193,7 @@ export class FoldersService {
     return {
       id: repo.id,
       path: repo.path,
-      name: path.basename(repo.path),
+      name: this.getDisplayName(repo.path, repo.remoteUrl),
       remoteUrl: repo.remoteUrl ?? null,
       lastAccessed: repo.lastAccessedAt ?? repo.createdAt,
       createdAt: repo.createdAt,
