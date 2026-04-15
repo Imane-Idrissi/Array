@@ -9,6 +9,7 @@ import {
   VideoIcon,
 } from "@phosphor-icons/react";
 import {
+  Badge,
   Box,
   Button,
   Flex,
@@ -16,6 +17,7 @@ import {
   Spinner,
   Switch,
   Text,
+  Tooltip,
 } from "@radix-ui/themes";
 import type {
   Evaluation,
@@ -34,6 +36,7 @@ export interface SignalSourceValues {
 interface SignalSourceToggleCardProps {
   icon: React.ReactNode;
   label: string;
+  labelSuffix?: React.ReactNode;
   description: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -47,6 +50,7 @@ interface SignalSourceToggleCardProps {
 const SignalSourceToggleCard = memo(function SignalSourceToggleCard({
   icon,
   label,
+  labelSuffix,
   description,
   checked,
   onCheckedChange,
@@ -77,9 +81,16 @@ const SignalSourceToggleCard = memo(function SignalSourceToggleCard({
         <Flex align="center" gap="3">
           <Box style={{ color: "var(--gray-11)", flexShrink: 0 }}>{icon}</Box>
           <Flex direction="column" gap="1">
-            <Text size="2" weight="medium" style={{ color: "var(--gray-12)" }}>
-              {label}
-            </Text>
+            <Flex align="center" gap="2">
+              <Text
+                size="2"
+                weight="medium"
+                style={{ color: "var(--gray-12)" }}
+              >
+                {label}
+              </Text>
+              {labelSuffix}
+            </Flex>
             <Text size="1" style={{ color: "var(--gray-11)" }}>
               {description}
             </Text>
@@ -90,13 +101,12 @@ const SignalSourceToggleCard = memo(function SignalSourceToggleCard({
         ) : requiresSetup ? (
           <Button
             size="1"
-            variant="soft"
             onClick={(e) => {
               e.stopPropagation();
               onSetup?.();
             }}
           >
-            Connect
+            Enable
           </Button>
         ) : (
           <Switch
@@ -174,9 +184,25 @@ export const EvaluationsSection = memo(function EvaluationsSection({
             <BrainIcon size={20} />
           </Box>
           <Flex direction="column" gap="1" style={{ flex: 1, minWidth: 0 }}>
-            <Text size="2" weight="medium" style={{ color: "var(--gray-12)" }}>
-              LLM evaluations
-            </Text>
+            <Flex align="center" gap="2">
+              <Text
+                size="2"
+                weight="medium"
+                style={{ color: "var(--gray-12)" }}
+              >
+                PostHog LLM Analytics
+              </Text>
+              <Tooltip content="This is only visible to staff users of PostHog">
+                <Badge
+                  color="blue"
+                  size="1"
+                  variant="surface"
+                  className="!py-0 !text-[9px] !leading-tight uppercase"
+                >
+                  Internal
+                </Badge>
+              </Tooltip>
+            </Flex>
             <Text size="1" style={{ color: "var(--gray-11)" }}>
               Ongoing evaluation of how your AI features are performing based on
               defined criteria
@@ -296,8 +322,26 @@ export function SignalSourceToggles({
   return (
     <Flex direction="column" gap="2">
       <SignalSourceToggleCard
+        icon={<BugIcon size={20} />}
+        label="PostHog Error Tracking"
+        description="Surface new issues, reopenings, and volume spikes"
+        checked={value.error_tracking}
+        onCheckedChange={toggleErrorTracking}
+        disabled={disabled}
+      />
+      <SignalSourceToggleCard
         icon={<VideoIcon size={20} />}
         label="PostHog Session Replay"
+        labelSuffix={
+          <Badge
+            color="orange"
+            size="1"
+            variant="surface"
+            className="!py-0 !text-[9px] !leading-tight uppercase"
+          >
+            Alpha
+          </Badge>
+        }
         description="Analyze session recordings and event data for UX issues"
         checked={value.session_replay}
         onCheckedChange={toggleSessionReplay}
@@ -310,14 +354,6 @@ export function SignalSourceToggles({
             />
           ) : undefined
         }
-      />
-      <SignalSourceToggleCard
-        icon={<BugIcon size={20} />}
-        label="PostHog Error Tracking"
-        description="Surface new issues, reopenings, and volume spikes"
-        checked={value.error_tracking}
-        onCheckedChange={toggleErrorTracking}
-        disabled={disabled}
       />
       {evaluations && evaluationsUrl && onToggleEvaluation && (
         <EvaluationsSection
