@@ -44,11 +44,6 @@ interface SessionViewProps {
   onCancelPrompt: () => void;
   repoPath?: string | null;
   cloudBranch?: string | null;
-  cloudDiffStats?: {
-    filesChanged: number;
-    linesAdded: number;
-    linesRemoved: number;
-  } | null;
   isSuspended?: boolean;
   onRestoreWorktree?: () => void;
   isRestoring?: boolean;
@@ -79,7 +74,6 @@ export function SessionView({
   onCancelPrompt,
   repoPath,
   cloudBranch,
-  cloudDiffStats,
   isSuspended = false,
   onRestoreWorktree,
   isRestoring = false,
@@ -129,14 +123,24 @@ export function SessionView({
   const sessionId = taskId ?? "default";
   const setContext = useDraftStore((s) => s.actions.setContext);
   const requestFocus = useDraftStore((s) => s.actions.requestFocus);
-  setContext(sessionId, {
+
+  useEffect(() => {
+    setContext(sessionId, {
+      taskId,
+      repoPath,
+      cloudBranch,
+      disabled: !isRunning,
+      isLoading: !!isPromptPending,
+    });
+  }, [
+    setContext,
+    sessionId,
     taskId,
     repoPath,
     cloudBranch,
-    cloudDiffStats,
-    disabled: !isRunning,
-    isLoading: !!isPromptPending,
-  });
+    isRunning,
+    isPromptPending,
+  ]);
 
   useHotkeys(
     "shift+tab",
