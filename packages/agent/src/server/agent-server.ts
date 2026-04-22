@@ -14,12 +14,17 @@ import {
 import { type ServerType, serve } from "@hono/node-server";
 import { getCurrentBranch } from "@posthog/git/queries";
 import { Hono } from "hono";
+import { z } from "zod";
 import packageJson from "../../package.json" with { type: "json" };
 import { POSTHOG_METHODS, POSTHOG_NOTIFICATIONS } from "../acp-extensions";
 import {
   createAcpConnection,
   type InProcessAcpConnection,
 } from "../adapters/acp-connection";
+import {
+  type AgentErrorClassification,
+  classifyAgentError,
+} from "../adapters/claude/conversion/sdk-to-acp";
 import { selectRecentTurns } from "../adapters/claude/session/jsonl-hydration";
 import type { PermissionMode } from "../execution-mode";
 import { DEFAULT_CODEX_MODEL } from "../gateway-models";
@@ -50,6 +55,16 @@ import {
 import { type JwtPayload, JwtValidationError, validateJwt } from "./jwt";
 import { jsonRpcRequestSchema, validateCommandParams } from "./schemas";
 import type { AgentServerConfig } from "./types";
+
+const agentErrorClassificationSchema = z.enum([
+  "upstream_stream_terminated",
+  "upstream_connection_error",
+  "agent_error",
+]) satisfies z.ZodType<AgentErrorClassification>;
+
+const errorWithClassificationSchema = z.object({
+  data: z.object({ classification: agentErrorClassificationSchema }),
+});
 
 type MessageCallback = (message: unknown) => void;
 
@@ -973,6 +988,41 @@ export class AgentServer {
     await this.sendInitialTaskMessage(payload, preTaskRun);
   }
 
+  private extractErrorClassification(error: unknown): {
+    classification: AgentErrorClassification;
+    message: string;
+  } {
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+
+    // Prefer the structured `data` carried on RequestError if present.
+    const parsed = errorWithClassificationSchema.safeParse(error);
+    if (parsed.success) {
+      return { classification: parsed.data.data.classification, message };
+    }
+
+    return { classification: classifyAgentError(message), message };
+  }
+
+  private classifyAndSignalFailure(
+    payload: JwtPayload,
+    phase: "initial" | "resume",
+    error: unknown,
+  ): Promise<void> {
+    const { classification, message } = this.extractErrorClassification(error);
+    const errorMessage =
+      classification === "upstream_stream_terminated"
+        ? "Upstream LLM stream terminated"
+        : classification === "upstream_connection_error"
+          ? "Upstream LLM connection error"
+          : message || "Agent error";
+    this.logger.error(`send_${phase}_task_message_failed`, {
+      classification,
+      message,
+    });
+    return this.signalTaskComplete(payload, "error", errorMessage);
+  }
+
   private async sendInitialTaskMessage(
     payload: JwtPayload,
     prefetchedRun?: TaskRun | null,
@@ -1087,7 +1137,7 @@ export class AgentServer {
       if (this.session) {
         await this.session.logWriter.flushAll();
       }
-      await this.signalTaskComplete(payload, "error");
+      await this.classifyAndSignalFailure(payload, "initial", error);
     }
   }
 
@@ -1176,7 +1226,7 @@ export class AgentServer {
       if (this.session) {
         await this.session.logWriter.flushAll();
       }
-      await this.signalTaskComplete(payload, "error");
+      await this.classifyAndSignalFailure(payload, "resume", error);
     }
   }
 
@@ -1657,6 +1707,7 @@ ${attributionInstructions}
   private async signalTaskComplete(
     payload: JwtPayload,
     stopReason: string,
+    errorMessage?: string,
   ): Promise<void> {
     if (this.session?.payload.run_id === payload.run_id) {
       try {
@@ -1684,7 +1735,7 @@ ${attributionInstructions}
     try {
       await this.posthogAPI.updateTaskRun(payload.task_id, payload.run_id, {
         status,
-        error_message: stopReason === "error" ? "Agent error" : undefined,
+        error_message: errorMessage ?? "Agent error",
       });
       this.logger.info("Task completion signaled", { status, stopReason });
     } catch (error) {
