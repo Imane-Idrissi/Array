@@ -34,24 +34,6 @@ function storedEntryToAcpMessage(entry: StoredLogEntry): AcpMessage {
 /**
  * Create a user message event for display.
  */
-export function createUserMessageEvent(text: string, ts: number): AcpMessage {
-  return {
-    type: "acp_message",
-    ts,
-    message: {
-      jsonrpc: "2.0",
-      id: ts,
-      method: "session/prompt",
-      params: {
-        prompt: [{ type: "text", text }],
-      },
-    } as JsonRpcRequest,
-  };
-}
-
-/**
- * Create a user prompt event from structured content blocks for display.
- */
 export function createUserPromptEvent(
   prompt: ContentBlock[],
   ts: number,
@@ -68,6 +50,10 @@ export function createUserPromptEvent(
       },
     } as JsonRpcRequest,
   };
+}
+
+export function createUserMessageEvent(text: string, ts: number): AcpMessage {
+  return createUserPromptEvent([{ type: "text", text }], ts);
 }
 
 /**
