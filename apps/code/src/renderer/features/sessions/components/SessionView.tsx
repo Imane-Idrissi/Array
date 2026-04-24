@@ -414,10 +414,10 @@ export function SessionView({
                           weight="duotone"
                           color="var(--gray-11)"
                         />
-                        <Text size="1" weight="medium">
+                        <Text className="font-medium text-[13px]">
                           Worktree suspended
                         </Text>
-                        <Text size="1" color="gray">
+                        <Text color="gray" className="text-[13px]">
                           Worktree was removed to save disk space
                         </Text>
                       </Flex>
@@ -479,16 +479,18 @@ export function SessionView({
                   >
                     <Warning size={32} weight="duotone" color="var(--red-9)" />
                     {errorTitle && (
-                      <Text size="3" weight="bold" align="center" color="red">
+                      <Text
+                        align="center"
+                        color="red"
+                        className="font-bold text-base"
+                      >
                         {errorTitle}
                       </Text>
                     )}
                     <Text
-                      size={errorTitle ? "2" : "3"}
-                      weight={errorTitle ? "regular" : "medium"}
                       align="center"
                       color={errorTitle ? "gray" : "red"}
-                      className="max-w-md px-4"
+                      className={`max-w-md px-4 ${errorTitle ? "text-sm" : "font-medium text-base"}`}
                     >
                       {errorMessage}
                     </Text>
@@ -527,15 +529,14 @@ export function SessionView({
                 ) : (
                   <Box className="relative border-gray-4 border-t">
                     <Box
-                      className={`absolute inset-0 flex items-center justify-center gap-2 transition-opacity duration-200 ${
+                      className={`absolute inset-0 flex min-h-[66px] items-center justify-center gap-2 transition-opacity duration-200 ${
                         isRunning
                           ? "pointer-events-none opacity-0"
                           : "opacity-100"
                       }`}
-                      style={{ minHeight: 66 }}
                     >
                       <Spinner size={28} className="animate-spin text-gray-9" />
-                      <Text size="3" color="gray">
+                      <Text color="gray" className="text-base">
                         Connecting to agent...
                       </Text>
                     </Box>
